@@ -38,4 +38,5 @@ export const codeSamples = {
   ],
   'C++': [
     '#include <iostream>', 'using namespace std;', '', 'int linearSearch(int arr[], int n, int key) {', '    int i;', '    for (i = 0; i < n; i++) {', '        if (arr[i] == key) {', '            return i;', '        }', '    }', '    return -1;', '}', '', 'int main() {', '    int arr[] = {12, 7, 24, 9, 31, 18};', '    int n = 6, key = 24;', '    int result = linearSearch(arr, n, key);', '    cout << "Index: " << result << endl;', '    return 0;', '}',
+  ],
 } as const;
