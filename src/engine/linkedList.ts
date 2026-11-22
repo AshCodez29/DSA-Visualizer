@@ -1,6 +1,6 @@
 export type ListAction = 'Traverse' | 'Insert at beginning' | 'Insert at end' | 'Insert at position' | 'Insert after value' | 'Delete from beginning' | 'Delete from end' | 'Delete at position' | 'Delete by value';
-export type ListTraceState = { line:number; operation:string; explanation:string; nodes:number[]; active:number|null; pointers:Record<string,number|null>; phase:'scan'|'create'|'link'|'remove'|'done'; variables:Record<string,string> };
-const snap=(nodes:number[],patch:Partial<ListTraceState>={}):ListTraceState=>{const merged={line:1,operation:'Initialize',explanation:'Begin with the current linked list.',nodes,active:null,pointers:{head:nodes.length?0:null},phase:'scan',variables:{},...patch} as ListTraceState;return {...merged,nodes:[...merged.nodes],pointers:{...merged.pointers},variables:{...merged.variables}}};
+export type ListTraceState = { line:number; operation:string; explanation:string; nodes:number[]; active:number|null; pointers:Record<string,number|null>; phase:'scan'|'create'|'link'|'remove'|'done'; variables:Record<string,string>; floatingNode:number|null };
+const snap=(nodes:number[],patch:Partial<ListTraceState>={}):ListTraceState=>{const merged={line:1,operation:'Initialize',explanation:'Begin with the current linked list.',nodes,active:null,pointers:{head:nodes.length?0:null},phase:'scan',variables:{},floatingNode:null,...patch} as ListTraceState;return {...merged,nodes:[...merged.nodes],pointers:{...merged.pointers},variables:{...merged.variables}}};
 export function buildLinkedListTrace(initial:number[], action:ListAction, value:number, position:number):ListTraceState[]{
   const list=[...initial], t:ListTraceState[]=[];const emit=(line:number,operation:string,explanation:string,patch:Partial<ListTraceState>={})=>t.push(snap(list,{line,operation,explanation,...patch}));
   emit(1,'Start at head','The head pointer refers to the first node. Each node stores data and a next link.',{pointers:{head:list.length?0:null}});
@@ -10,16 +10,17 @@ export function buildLinkedListTrace(initial:number[], action:ListAction, value:
   } else if(action.startsWith('Insert')){
     const newValue=value;
     if(action==='Insert at beginning'){
-      list.unshift(newValue); emit(4,'Create newNode',`Allocate a node and store ${newValue}.`,{line:4,phase:'create',active:0,pointers:{head:1,newNode:0},variables:{'newNode->data':String(newValue)}});
-      emit(5,'Link to old head','Set newNode->next to the previous head node.',{line:5,phase:'link',active:0,pointers:{head:1,newNode:0,temp:1},variables:{'newNode->next':'old head'}});
-      emit(6,'Move head','Set head = newNode. The new node is now first.',{line:6,phase:'done',active:0,pointers:{head:0,newNode:0}});
+      emit(4,'Create newNode',`Allocate a separate node and store ${newValue}. Its next pointer is NULL for now.`,{line:4,phase:'create',floatingNode:newValue,pointers:{head:list.length?0:null,newNode:null},variables:{'newNode->data':String(newValue),'newNode->next':'NULL'}});
+      emit(5,'Link newNode to head','Set newNode->next to the current head. The new node is still shown separately until head moves.',{line:5,phase:'link',floatingNode:newValue,active:0,pointers:{head:list.length?0:null,newNode:null},variables:{'newNode->next':list.length?'node 1':'NULL'}});
+      list.unshift(newValue);emit(6,'Move head','Set head = newNode. The new node is now first in the chain.',{line:6,phase:'done',active:0,pointers:{head:0,newNode:0}});
     } else {
       const idx=action==='Insert at end'?list.length:action==='Insert after value'?Math.max(0,list.indexOf(position)+1):Math.max(0,Math.min(list.length,position-1));
-      emit(4,'Create newNode',`Allocate a node and store ${newValue}; set newNode->next = NULL.`,{line:4,phase:'create',pointers:{head:list.length?0:null,newNode:idx,temp:null},variables:{'newNode->data':String(newValue),'newNode->next':'NULL'}});
+      emit(4,'Create newNode',`Allocate a separate node containing ${newValue}, with newNode->next = NULL.`,{line:4,phase:'create',floatingNode:newValue,pointers:{head:list.length?0:null,newNode:null,temp:null},variables:{'newNode->data':String(newValue),'newNode->next':'NULL'}});
       if(action==='Insert after value'&& !list.includes(position))emit(7,'Value not found',`There is no node with value ${position}; the list is unchanged.`,{line:7,phase:'done',pointers:{head:list.length?0:null,newNode:null}});
       else {
-        const stop=Math.max(0,idx-1);for(let i=0;i<=stop&&i<list.length;i++)emit(7,'Move temp',`temp advances to ${list[i]}.`,{line:7,active:i,pointers:{head:0,temp:i,newNode:idx},variables:{temp:String(list[i])}});
-        list.splice(idx,0,newValue);emit(9,'Connect new node',idx===0?'The new node becomes head and points to the old first node.':`Set node ${idx} next to newNode. The value ${newValue} is now linked into the list.`,{line:9,phase:'link',active:idx,pointers:{head:0,temp:Math.max(0,idx-1),newNode:idx},variables:{'temp->next':'newNode'}});emit(10,'Insertion complete',`The list now contains ${list.length} nodes.`,{line:10,phase:'done',active:idx,pointers:{head:0,newNode:idx}});
+        const stop=Math.max(0,idx-1);for(let i=0;i<=stop&&i<list.length;i++)emit(7,'Move temp',`temp advances to ${list[i]}. The separate newNode remains visible above.`,{line:7,active:i,floatingNode:newValue,pointers:{head:0,temp:i,newNode:null},variables:{temp:String(list[i])}});
+        emit(9,'Connect new node',idx===0?'Set newNode->next to the current head, then move head.':`Set the current node's next pointer to newNode (${newValue}).`,{line:9,phase:'link',active:idx?idx-1:null,floatingNode:null,pointers:{head:0,temp:idx?idx-1:null,newNode:idx},variables:{'temp->next':'newNode'}});
+        list.splice(idx,0,newValue);emit(10,'Insertion complete',`The new node is linked into the list. It now contains ${list.length} nodes.`,{line:10,phase:'done',active:idx,pointers:{head:0,newNode:idx}});
       }
     }
   } else {
