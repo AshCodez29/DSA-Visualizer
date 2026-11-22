@@ -59,7 +59,7 @@ The app is built with React, TypeScript, and Vite. It runs entirely in the brows
 ### Install and run locally
 
 ```bash
-git clone <repository-url>
+git clone <https://github.com/AshCodez29/DSA-Visualizer.git>
 cd <repository-directory>
 npm install
 npm run dev
